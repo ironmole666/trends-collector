@@ -1,0 +1,21 @@
+[Unit]
+Description=TrendsCollector Relay Receiver - accepts pushes from China-side relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/trends-collector/venv/bin/python -m trends_collector.receiver --port 8765 --config /opt/trends-collector/config.yaml
+WorkingDirectory=/opt/trends-collector
+Environment=PYTHONUNBUFFERED=1
+User=trends-collector
+Group=trends-collector
+# Set the shared secret that matches what the relay script uses:
+# Environment=RELAY_PUSH_KEY=your_shared_secret_key
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/trends-collector/logs/receiver.log
+StandardError=append:/opt/trends-collector/logs/receiver.log
+
+[Install]
+WantedBy=multi-user.target

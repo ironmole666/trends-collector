@@ -1,0 +1,99 @@
+# =============================================================================
+# TrendsCollector Configuration
+# =============================================================================
+# Deploy on an overseas VPS. All sources used here are accessible globally
+# (no dependency on China mainland services).
+#
+# Default paths (data_dir, log_dir, db_path) resolve relative to the project
+# root if left null. Override them to absolute paths on the deployed VPS.
+# =============================================================================
+
+# --- Paths (null = auto-resolve to project root) ---
+data_dir: null
+log_dir: null
+log_level: INFO
+
+# --- Collectors ---
+collectors:
+  # Google Trends RSS (no API key needed)
+  google_trends:
+    enabled: true
+    regions:
+      - US
+      - GB
+      - JP
+      - KR
+      - CA
+      - AU
+      - DE
+      - FR
+      - BR
+      - IN
+
+  # Reddit hot posts (public JSON API, no API key needed)
+  reddit:
+    enabled: true
+    subreddits:
+      - all
+      - worldnews
+      - technology
+      - science
+      - programming
+      - DataIsBeautiful
+    limit: 25
+
+  # Hacker News front page (Algolia API, free)
+  hackernews:
+    enabled: true
+    limit: 30
+
+  # GitHub trending (GitHub Search API, unauthenticated has rate limits)
+  github:
+    enabled: true
+    languages:
+      - python
+      - javascript
+      - go
+      - rust
+      - typescript
+
+  # YouTube trending (requires API key via env YOUTUBE_API_KEY)
+  youtube:
+    enabled: false
+    api_key: ""
+    regions:
+      - US
+      - JP
+      - GB
+
+# --- Storage ---
+storage:
+  db_path: null     # null = <data_dir>/trends.db
+  retention_days: 30
+
+# --- Notifications ---
+notifications:
+  # Telegram bot (optional, set bot_token + chat_id via env or here)
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+
+  # Email via SMTP (password via env EMAIL_SMTP_PASSWORD)
+  # QQ 邮箱：端口 465，smtp_use_tls: false，密码填授权码（非QQ密码）
+  email:
+    enabled: false
+    smtp_host: "smtp.qq.com"
+    smtp_port: 465
+    smtp_user: "123456789@qq.com"
+    smtp_password: ""           # 授权码，或 env EMAIL_SMTP_PASSWORD
+    smtp_use_tls: false         # false=SSL(465)，true=STARTTLS(587)
+    from_addr: "123456789@qq.com"
+    to_addrs:
+      - "123456789@qq.com"
+
+# --- Relay (China-side relay receiver) ---
+# When enabled, starts an HTTP receiver on the VPS to accept pushes
+# from the china_relay_collector.py running on a China-accessible machine.
+relay:
+  push_key: ""            # shared secret, or env RELAY_PUSH_KEY
