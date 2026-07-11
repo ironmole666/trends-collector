@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 import requests
 from .base import BaseCollector
 
@@ -22,9 +23,12 @@ class GitHubCollector(BaseCollector):
         return all_items
 
     def _fetch_trending(self, language: str) -> list:
+        # GitHub Search API 不支持 ">7days"，必须用具体日期
+        since = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+
         url = "https://api.github.com/search/repositories"
         params = {
-            "q": f"language:{language}+created:>7days",
+            "q": f"language:{language} created:>{since}",
             "sort": "stars",
             "order": "desc",
             "per_page": 10,
@@ -35,6 +39,10 @@ class GitHubCollector(BaseCollector):
         if resp.status_code == 403:
             logger.warning("[GitHub] API rate limited, skipping")
             return []
+        if resp.status_code == 422:
+            logger.warning(f"[GitHub] 422 for {language}: {resp.text[:200]}")
+            return []
+
         resp.raise_for_status()
         data = resp.json()
         repos = data.get("items", [])
