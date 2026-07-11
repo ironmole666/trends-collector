@@ -4,6 +4,7 @@ from .reddit import RedditCollector
 from .hackernews import HackerNewsCollector
 from .youtube import YouTubeCollector
 from .github import GitHubCollector
+from .wikipedia import WikipediaCollector
 
 __all__ = [
     "BaseCollector",
@@ -12,4 +13,5 @@ __all__ = [
     "HackerNewsCollector",
     "YouTubeCollector",
     "GitHubCollector",
+    "WikipediaCollector",
 ]

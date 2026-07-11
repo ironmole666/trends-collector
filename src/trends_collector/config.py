@@ -42,6 +42,10 @@ def load_config(config_path=None):
                 "enabled": True,
                 "languages": ["python", "javascript", "go", "rust", "typescript"],
             },
+            "wikipedia": {
+                "enabled": True,
+                "languages": ["en", "ja", "ko", "de", "fr", "es", "pt"],
+            },
         },
         "storage": {
             "db_path": None,

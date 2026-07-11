@@ -15,7 +15,7 @@ log_level: INFO
 
 # --- Collectors ---
 collectors:
-  # Google Trends RSS (no API key needed)
+  # Google Trends RSS (数据中心 IP 可能返回空，备用可改用网页版)
   google_trends:
     enabled: true
     regions:
@@ -30,7 +30,7 @@ collectors:
       - BR
       - IN
 
-  # Reddit hot posts (public JSON API, no API key needed)
+  # Reddit hot posts (数据中心 IP 经常被 403 屏蔽)
   reddit:
     enabled: true
     subreddits:
@@ -42,12 +42,12 @@ collectors:
       - DataIsBeautiful
     limit: 25
 
-  # Hacker News front page (Algolia API, free)
+  # Hacker News front page (最稳定，始终可用)
   hackernews:
     enabled: true
     limit: 30
 
-  # GitHub trending (GitHub Search API, unauthenticated has rate limits)
+  # GitHub trending repos (改爬 html 页面，无需 API Key，无速率限制)
   github:
     enabled: true
     languages:
@@ -57,7 +57,19 @@ collectors:
       - rust
       - typescript
 
-  # YouTube trending (requires API key via env YOUTUBE_API_KEY)
+  # Wikipedia 每日热门文章 (免费 REST API，无认证，数据中心友好)
+  wikipedia:
+    enabled: true
+    languages:
+      - en
+      - ja
+      - ko
+      - de
+      - fr
+      - es
+      - pt
+
+  # YouTube trending (可选，需 API Key 通过 env YOUTUBE_API_KEY)
   youtube:
     enabled: false
     api_key: ""
@@ -73,27 +85,24 @@ storage:
 
 # --- Notifications ---
 notifications:
-  # Telegram bot (optional, set bot_token + chat_id via env or here)
+  # Telegram bot (可选)
   telegram:
     enabled: false
     bot_token: ""
     chat_id: ""
 
-  # Email via SMTP (password via env EMAIL_SMTP_PASSWORD)
-  # QQ 邮箱：端口 465，smtp_use_tls: false，密码填授权码（非QQ密码）
+  # Email via SMTP
   email:
     enabled: false
     smtp_host: "smtp.qq.com"
     smtp_port: 465
     smtp_user: "123456789@qq.com"
-    smtp_password: ""           # 授权码，或 env EMAIL_SMTP_PASSWORD
-    smtp_use_tls: false         # false=SSL(465)，true=STARTTLS(587)
+    smtp_password: ""
+    smtp_use_tls: false
     from_addr: "123456789@qq.com"
     to_addrs:
       - "123456789@qq.com"
 
 # --- Relay (China-side relay receiver) ---
-# When enabled, starts an HTTP receiver on the VPS to accept pushes
-# from the china_relay_collector.py running on a China-accessible machine.
 relay:
-  push_key: ""            # shared secret, or env RELAY_PUSH_KEY
+  push_key: ""

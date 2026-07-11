@@ -1,5 +1,10 @@
+"""
+GitHub trending repositories collector.
+Scrapes https://github.com/trending (no API key, no rate limits).
+"""
+
 import logging
-from datetime import datetime, timedelta
+import re
 import requests
 from .base import BaseCollector
 
@@ -11,6 +16,13 @@ class GitHubCollector(BaseCollector):
         super().__init__(config)
         self.source_name = "github"
         self.languages = config.get("languages", ["python", "javascript", "go", "rust", "typescript"])
+        self.session = requests.Session()
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/125.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        })
 
     def collect(self) -> list:
         all_items = []
@@ -23,41 +35,61 @@ class GitHubCollector(BaseCollector):
         return all_items
 
     def _fetch_trending(self, language: str) -> list:
-        # GitHub Search API 不支持 ">7days"，必须用具体日期
-        since = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-
-        url = "https://api.github.com/search/repositories"
-        params = {
-            "q": f"language:{language} created:>{since}",
-            "sort": "stars",
-            "order": "desc",
-            "per_page": 10,
-        }
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        resp = requests.get(url, params=params, headers=headers, timeout=15)
-
-        if resp.status_code == 403:
-            logger.warning("[GitHub] API rate limited, skipping")
-            return []
-        if resp.status_code == 422:
-            logger.warning(f"[GitHub] 422 for {language}: {resp.text[:200]}")
-            return []
-
+        url = f"https://github.com/trending/{language}?since=weekly"
+        resp = self.session.get(url, timeout=15)
         resp.raise_for_status()
-        data = resp.json()
-        repos = data.get("items", [])
 
+        html = resp.text
         items = []
-        for i, repo in enumerate(repos, 1):
-            title = f"[{repo.get('full_name', '')}] {repo.get('description', '') or 'No description'}"
-            url = repo.get("html_url", "")
-            score = repo.get("stargazers_count", 0)
-            author = repo.get("owner", {}).get("login", "")
-            created = repo.get("created_at", "")
-            region = language
+
+        # Parse repo cards from the trending page
+        # Each repo card starts with <article class="Box-row">
+        articles = re.findall(
+            r'<article class="Box-row[^"]*"[^>]*>(.*?)</article>',
+            html, re.DOTALL
+        )
+
+        for i, article in enumerate(articles, 1):
+            # Repo name: <h2><a href="/owner/repo">
+            name_match = re.search(
+                r'<h[23][^>]*>.*?<a\s+href="/([^"/]+/[^"/]+)"',
+                article, re.DOTALL
+            )
+            if not name_match:
+                continue
+            full_name = name_match.group(1)
+
+            # Description
+            desc_match = re.search(
+                r'<p class="col-9[^"]*"[^>]*>\s*(.*?)\s*</p>',
+                article, re.DOTALL
+            )
+            description = ""
+            if desc_match:
+                description = re.sub(r'<[^>]+>', '', desc_match.group(1)).strip()
+                # Clean up whitespace
+                description = re.sub(r'\s+', ' ', description)
+
+            # Stars count
+            stars_match = re.search(
+                r'<a[^>]*href="/[^"]+/stargazers"[^>]*>.*?(\d[\d,]*)\s*</a>',
+                article, re.DOTALL
+            )
+            stars = 0
+            if stars_match:
+                stars = int(stars_match.group(1).replace(",", ""))
+
+            title = f"[{full_name}] {description}" if description else f"[{full_name}]"
+            repo_url = f"https://github.com/{full_name}"
 
             items.append(self._item(
-                title=title[:200], url=url, rank=i, score=score,
-                author=author, region=region, created_at=created,
+                title=title[:200], url=repo_url, rank=i,
+                score=stars, region=language,
+                raw_data=f"{{'full_name':'{full_name}','lang':'{language}'}}"
             ))
+
+        if not items:
+            logger.warning(f"[GitHub {language}] No repos found in trending page")
+
+        logger.info(f"[GitHub {language}] scraped {len(items)} trending repos")
         return items

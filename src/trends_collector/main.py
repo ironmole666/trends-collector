@@ -26,6 +26,7 @@ from .collectors import (
     HackerNewsCollector,
     YouTubeCollector,
     GitHubCollector,
+    WikipediaCollector,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,10 @@ def build_collectors(config: dict):
     gh_cfg = config.get("collectors", {}).get("github", {})
     if gh_cfg.get("enabled", True):
         collectors.append(GitHubCollector(gh_cfg))
+
+    wp_cfg = config.get("collectors", {}).get("wikipedia", {})
+    if wp_cfg.get("enabled", True):
+        collectors.append(WikipediaCollector(wp_cfg))
 
     yt_cfg = config.get("collectors", {}).get("youtube", {})
     if yt_cfg.get("enabled", False):
@@ -148,7 +153,7 @@ def main():
     notifier = Notifier(config)
 
     if args.report:
-        report_text = print_report(storage)
+        print_report(storage)
         save_report(storage, log_dir)
         return
 
