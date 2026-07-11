@@ -1,11 +1,12 @@
 """
 GitHub trending repositories collector.
 Scrapes https://github.com/trending (no API key, no rate limits).
-Falls back to simpler parsing if the page structure differs.
+Falls back to GitHub Search API as last resort.
 """
 
 import logging
 import re
+from datetime import datetime, timedelta
 import requests
 from .base import BaseCollector
 
@@ -23,7 +24,6 @@ class GitHubCollector(BaseCollector):
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/125.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
         })
 
     def collect(self) -> list:
@@ -39,51 +39,80 @@ class GitHubCollector(BaseCollector):
     def _fetch_trending(self, language: str) -> list:
         url = f"https://github.com/trending/{language}?since=weekly"
         resp = self.session.get(url, timeout=15)
-
-        # 检测是否是反爬页面
-        if "trending repositories" not in resp.text and "Trending" not in resp.text:
-            logger.warning(f"[GitHub {language}] Response doesn't look like trending page "
-                           f"(len={len(resp.text)}, snippet={resp.text[:200]})")
-            # 尝试方式二：raw.githubusercontent.com 上的第三方趋势 API 替代
-            alt_items = self._fallback_api(language)
-            if alt_items:
-                return alt_items
-            return []
-
         html = resp.text
+
+        # 如果是反爬页面，截取片段到日志辅助诊断
+        if "Trending" not in html and "trending" not in html:
+            snippet = html[:300].replace("\n", " ").strip()
+            logger.warning(f"[GitHub {language}] Not trending page, snippet={snippet}")
+            return self._fallback_search(language)
+
         items = []
 
-        # 方式一：<article> 容器解析
-        articles = re.findall(
-            r'<article\s+class="[^"]*Box-row[^"]*"[^>]*>(.*?)</article>',
+        # 方式一：尝试解析 <h2 class="h3"> 容器（GitHub 2024+ 新版 layout）
+        # 新版 trending 页面可能不使用 <article>, 改用 <div class="Box-row">
+        rows = re.findall(
+            r'<div\s+class="Box-row[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</li>',
             html, re.DOTALL
         )
+        if not rows:
+            # 方式二：尝试旧格式 <article class="Box-row">
+            rows = re.findall(
+                r'<article\s+class="[^"]*Box-row[^"]*"[^>]*>(.*?)</article>',
+                html, re.DOTALL
+            )
+        if not rows:
+            # 方式三：最简单的粗暴方法 - 找所有 h2 > a 链接到仓库的
+            rows = re.findall(
+                r'<h[23][^>]*>.*?<a\s+href="/([^"/]+/[^"/]+)"[^>]*>.*?</h[23]>',
+                html, re.DOTALL
+            )
+            if rows:
+                for i, full_name in enumerate(rows, 1):
+                    items.append(self._item(
+                        title=f"[{full_name}]",
+                        url=f"https://github.com/{full_name}",
+                        rank=i, score=0, region=language,
+                    ))
+                logger.info(f"[GitHub {language}] parsed {len(items)} repos (mode 3)")
+                return items
 
-        for i, article in enumerate(articles, 1):
+        for i, row in enumerate(rows, 1):
+            # Repo name
             name_match = re.search(
-                r'<h[23][^>]*>.*?<a\s+href="/([^"/]+/[^"/]+)"',
-                article, re.DOTALL
+                r'href="/([^"/]+/[^"/]+)"',
+                row
             )
             if not name_match:
                 continue
             full_name = name_match.group(1)
 
+            # Description (optional <p>)
             desc_match = re.search(
-                r'<p\s+class="col-9[^"]*"[^>]*>\s*(.*?)\s*</p>',
-                article, re.DOTALL
+                r'<p[^>]*>\s*(.*?)\s*</p>',
+                row, re.DOTALL
             )
             description = ""
             if desc_match:
                 description = re.sub(r'<[^>]+>', '', desc_match.group(1)).strip()
                 description = re.sub(r'\s+', ' ', description)
 
-            stars_match = re.search(
-                r'<a[^>]*href="/[^"]+/stargazers"[^>]*>.*?(\d[\d,]*)\s*</a>',
-                article, re.DOTALL
-            )
+            # Stars (look for svg.octicon-star + following text)
             stars = 0
+            stars_match = re.search(
+                r'(\d[\d,]*)\s*<a[^>]*>[\s\S]{0,50}star',
+                row, re.IGNORECASE
+            )
+            if not stars_match:
+                stars_match = re.search(
+                    r'star[\s\S]{0,50}(\d[\d,]*)',
+                    row, re.IGNORECASE
+                )
             if stars_match:
-                stars = int(stars_match.group(1).replace(",", ""))
+                try:
+                    stars = int(stars_match.group(1).replace(",", ""))
+                except ValueError:
+                    stars = 0
 
             title = f"[{full_name}] {description}" if description else f"[{full_name}]"
             repo_url = f"https://github.com/{full_name}"
@@ -91,25 +120,51 @@ class GitHubCollector(BaseCollector):
             items.append(self._item(
                 title=title[:200], url=repo_url, rank=i,
                 score=stars, region=language,
-                raw_data=f"{{'full_name':'{full_name}','lang':'{language}'}}"
             ))
 
         if items:
-            logger.info(f"[GitHub {language}] scraped {len(items)} trending repos")
+            logger.info(f"[GitHub {language}] parsed {len(items)} repos")
         else:
-            # 方式二：尝试第三方 API 作为兜底
-            logger.info(f"[GitHub {language}] article parsing returned 0, trying fallback")
-            alt_items = self._fallback_api(language)
-            if alt_items:
-                return alt_items
-            logger.warning(f"[GitHub {language}] No repos found")
+            logger.warning(f"[GitHub {language}] all parsing modes failed, "
+                           f"trying Search API fallback")
+            return self._fallback_search(language)
 
         return items
 
-    def _fallback_api(self, language: str) -> list:
+    def _fallback_search(self, language: str) -> list:
         """
-        替代方案：使用 gh-trending-api 第三方服务或简单的行解析。
-        目前返回空列表，后续可接入可靠的三方 API。
+        最终兜底：用 GitHub Search API，限定每轮只查第一个语言，
+        避免耗尽 60 req/hour 的共享额度。
         """
-        logger.info(f"[GitHub {language}] No fallback API configured")
-        return []
+        # 只在 python 语言上尝试 API，其他语言直接跳过
+        if language != self.languages[0]:
+            return []
+
+        since = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+        url = "https://api.github.com/search/repositories"
+        params = {
+            "q": f"language:{language} created:>{since}",
+            "sort": "stars", "order": "desc", "per_page": 10,
+        }
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=15)
+            if resp.status_code == 403:
+                logger.warning(f"[GitHub {language}] Search API rate limited")
+                return []
+            resp.raise_for_status()
+            repos = resp.json().get("items", [])
+            items = []
+            for i, repo in enumerate(repos, 1):
+                title = f"[{repo.get('full_name','')}] {repo.get('description','') or ''}"
+                items.append(self._item(
+                    title=title[:200],
+                    url=repo.get("html_url", ""),
+                    rank=i, score=repo.get("stargazers_count", 0),
+                    region=language,
+                ))
+            logger.info(f"[GitHub {language}] fallback API returned {len(items)} repos")
+            return items
+        except Exception as e:
+            logger.error(f"[GitHub {language}] fallback API failed: {e}")
+            return []
