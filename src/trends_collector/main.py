@@ -151,7 +151,7 @@ def main():
     )
     storage = Storage(config["storage"]["db_path"])
     notifier = Notifier(config)
-
+    notifier.set_storage(storage)
     if args.report:
         print_report(storage)
         save_report(storage, log_dir)

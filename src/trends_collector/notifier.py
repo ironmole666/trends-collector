@@ -61,7 +61,6 @@ class _EmailChannel:
 
         try:
             if self.use_tls:
-                # STARTTLS on port 587
                 with smtplib.SMTP(self.host, self.port, timeout=15) as server:
                     server.ehlo()
                     server.starttls(context=ssl.create_default_context())
@@ -69,7 +68,6 @@ class _EmailChannel:
                     server.login(self.user, self.password)
                     server.sendmail(self.from_addr, self.to_addrs, msg.as_string())
             else:
-                # SSL on port 465
                 with smtplib.SMTP_SSL(self.host, self.port, timeout=15,
                                       context=ssl.create_default_context()) as server:
                     server.login(self.user, self.password)
@@ -93,8 +91,11 @@ class Notifier:
         notif_cfg = config.get("notifications", {})
         self._telegram = _TelegramChannel(notif_cfg)
         self._email = _EmailChannel(notif_cfg)
+        self._storage = None
 
-    # -- public API -------------------------------------------------------
+    def set_storage(self, storage):
+        """Pass in storage so the summary can query per-source top items."""
+        self._storage = storage
 
     def send_summary(self, stats: dict, top_items: list):
         text = self._format_summary(stats, top_items)
@@ -106,31 +107,38 @@ class Notifier:
         self._telegram.send(body)
         self._email.send(body, subject="TrendsCollector Error")
 
-    # -- formatting -------------------------------------------------------
-
-    @staticmethod
-    def _format_summary(stats: dict, top_items: list) -> str:
+    def _format_summary(self, stats: dict, top_items: list) -> str:
         from datetime import datetime
+        by_source = stats.get("by_source", {})
+
         lines = [
             f"TrendsCollector Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')})",
             f"Total items collected (24h): {stats.get('total', 0)}",
         ]
 
-        by_source = stats.get("by_source", {})
         if by_source:
             lines.append("")
             for src, cnt in sorted(by_source.items(), key=lambda x: -x[1]):
                 lines.append(f"  {src}: {cnt}")
 
-        if top_items:
-            lines.extend(["", "Top items:"])
-            for item in top_items[:10]:
-                title = item.get("title", "")[:70]
-                score = item.get("score", 0)
-                source = item.get("source", "")
-                url = item.get("url", "")
-                lines.append(f"  [{score:>8}] [{source}] {title}")
-                if url:
-                    lines.append(f"           {url}")
+        # Per-source top items (only if storage is available)
+        if self._storage:
+            lines.extend(["", "Top items by source:"])
+            for src in sorted(by_source.keys()):
+                items = self._storage.get_recent(source=src, limit=5, hours=24)
+                if items:
+                    source_label = {
+                        "google_trends": "Google Trends",
+                        "hackernews": "HN",
+                        "github": "GitHub",
+                        "wikipedia": "Wiki",
+                        "youtube": "YT",
+                    }.get(src, src)
+                    for item in items:
+                        title = item.get("title", "")[:60]
+                        score = item.get("score", 0)
+                        lines.append(f"  [{source_label}] {title}")
+                        if score > 0:
+                            lines[-1] += f" ({score:,})"
 
         return "\n".join(lines)
