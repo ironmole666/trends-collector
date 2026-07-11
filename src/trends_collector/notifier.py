@@ -94,13 +94,20 @@ class Notifier:
         self._storage = None
 
     def set_storage(self, storage):
-        """Pass in storage so the summary can query per-source top items."""
         self._storage = storage
 
-    def send_summary(self, stats: dict, top_items: list):
-        text = self._format_summary(stats, top_items)
-        self._telegram.send(text)
-        self._email.send(text, subject="TrendsCollector Summary")
+    def send_summary(self, stats: dict, top_items: list, full_report: str = None):
+        """Send collection summary.
+        Telegram gets short summary (4096 char limit).
+        Email gets the full daily report (per-source TOP 10) if available.
+        """
+        short_text = self._format_summary(stats, top_items)
+        self._telegram.send(short_text)
+
+        if full_report:
+            self._email.send(full_report, subject="TrendsCollector Report")
+        else:
+            self._email.send(short_text, subject="TrendsCollector Summary")
 
     def send_error(self, message: str):
         body = f"\u26a0\ufe0f TrendsCollector Error\n{message}"
@@ -121,7 +128,6 @@ class Notifier:
             for src, cnt in sorted(by_source.items(), key=lambda x: -x[1]):
                 lines.append(f"  {src}: {cnt}")
 
-        # Per-source top items (only if storage is available)
         if self._storage:
             lines.extend(["", "Top items by source:"])
             for src in sorted(by_source.keys()):

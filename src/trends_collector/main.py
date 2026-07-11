@@ -131,7 +131,12 @@ def run_collection(config: dict, storage: Storage, notifier: Notifier, log_dir: 
     # Send summary notification
     stats = storage.get_stats(hours=24)
     top = storage.get_top(hours=24, limit=10)
-    notifier.send_summary(stats, top)
+    report_text = None
+    try:
+        report_text = report_path.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    notifier.send_summary(stats, top, report_text)
 
     return total_new
 
