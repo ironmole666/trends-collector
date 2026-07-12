@@ -317,7 +317,7 @@ sudo sqlite3 /opt/trends-collector/data/trends.db \
 sudo /opt/trends-collector/venv/bin/python -m trends_collector --report
 
 # 查看最新日报文件
-sudo cat /opt/trends-collector/logs/$(ls -t /opt/trends-collector/logs/report_*.txt | head -1)
+sudo ls -t /opt/trends-collector/logs/report_*.txt | head -1 | xargs sudo cat
 ```
 
 ---

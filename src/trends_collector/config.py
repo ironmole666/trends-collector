@@ -67,10 +67,13 @@ def load_config(config_path=None):
                 "from_addr": "",
                 "to_addrs": [],
             },
-        },
-        "relay": {
-            "push_url": "",
-            "push_key": "",
+            "http_email": {
+                "enabled": False,
+                "api_key": "",
+                "provider": "sendgrid",
+                "from_addr": "",
+                "to_addrs": [],
+            },
         },
     }
 
@@ -103,6 +106,7 @@ def load_config(config_path=None):
         ("notifications", "telegram", "bot_token"): "TELEGRAM_BOT_TOKEN",
         ("notifications", "telegram", "chat_id"): "TELEGRAM_CHAT_ID",
         ("notifications", "email", "smtp_password"): "EMAIL_SMTP_PASSWORD",
+        ("notifications", "http_email", "api_key"): "SENDGRID_API_KEY",
     }
 
     for keys, env_var in env_overrides.items():

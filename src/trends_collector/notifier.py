@@ -84,31 +84,46 @@ class _EmailChannel:
             logger.error(f"Email send failed: {e}")
 
 
-class _HttpRelayChannel:
-    """Sends report to a remote HTTP relay server (e.g. VPS A that has SMTP).
-    Used when the local VPS (VPS B) cannot reach SMTP ports directly."""
+class _HttpEmailChannel:
+    """Sends email via HTTPS API (SendGrid, Resend, etc.).
+    Works when SMTP ports are blocked (NAT VPS).
+    Goes through port 443 so it works on any VPS."""
 
     def __init__(self, config: dict):
-        relay_cfg = config.get("relay", {})
-        self.push_url = relay_cfg.get("push_url", "").strip()
-        self.push_key = relay_cfg.get("push_key", "")
-        self.enabled = bool(self.push_url)
+        cfg = config.get("http_email", {})
+        self.enabled = cfg.get("enabled", False)
+        self.api_key = cfg.get("api_key", "")
+        self.from_addr = cfg.get("from_addr", "")
+        self.to_addrs = cfg.get("to_addrs", [])
 
     def send(self, text: str, subject: str = "TrendsCollector Report"):
-        if not self.enabled:
+        if not (self.enabled and self.api_key and self.from_addr and self.to_addrs):
             return
+
+        url = "https://api.sendgrid.com/v3/mail/send"
+        payload = {
+            "personalizations": [{"to": [{"email": a} for a in self.to_addrs]}],
+            "from": {"email": self.from_addr},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": text}],
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
         try:
-            import requests
-            payload = {"text": text, "subject": subject}
-            if self.push_key:
-                payload["key"] = self.push_key
-            resp = requests.post(self.push_url, json=payload, timeout=15)
-            if resp.status_code != 200:
-                logger.error(f"Relay push failed: HTTP {resp.status_code} {resp.text[:100]}")
+            resp = requests.post(url, json=payload, headers=headers, timeout=15)
+            if resp.status_code == 401:
+                logger.error("SendGrid auth failed -- check api_key")
+            elif resp.status_code == 403:
+                logger.error(f"SendGrid forbidden -- sender {self.from_addr} not verified")
+            elif resp.status_code not in (200, 201, 202):
+                logger.error(f"SendGrid API error: HTTP {resp.status_code} {resp.text[:200]}")
             else:
-                logger.info(f"Report pushed to relay {self.push_url}")
+                logger.info(f"Email sent via SendGrid API to {self.to_addrs}")
         except Exception as e:
-            logger.error(f"Relay push connection failed: {e}")
+            logger.error(f"SendGrid API request failed: {e}")
 
 
 class Notifier:
@@ -118,7 +133,7 @@ class Notifier:
         notif_cfg = config.get("notifications", {})
         self._telegram = _TelegramChannel(notif_cfg)
         self._email = _EmailChannel(notif_cfg)
-        self._relay = _HttpRelayChannel(config)
+        self._http_email = _HttpEmailChannel(config)
         self._storage = None
 
     def set_storage(self, storage):
@@ -134,19 +149,26 @@ class Notifier:
         self._telegram.send(short_text)
 
         if full_report:
-            self._email.send(full_report, subject="TrendsCollector Report")
-            # If local email is disabled, push full report via HTTP relay
-            if not self._email.enabled:
-                self._relay.send(full_report, "TrendsCollector Report")
+            # Try SMTP first (VPS A), fall back to HTTP API (VPS B)
+            if self._email.enabled:
+                self._email.send(full_report, subject="TrendsCollector Report")
+            elif self._http_email.enabled:
+                self._http_email.send(full_report, "TrendsCollector Report")
+            else:
+                logger.warning("No email channel enabled (neither SMTP nor HTTP API)")
         else:
-            self._email.send(short_text, subject="TrendsCollector Summary")
-            if not self._email.enabled:
-                self._relay.send(short_text, "TrendsCollector Summary")
+            if self._email.enabled:
+                self._email.send(short_text, subject="TrendsCollector Summary")
+            elif self._http_email.enabled:
+                self._http_email.send(short_text, "TrendsCollector Summary")
 
     def send_error(self, message: str):
         body = f"\u26a0\ufe0f TrendsCollector Error\n{message}"
         self._telegram.send(body)
-        self._email.send(body, subject="TrendsCollector Error")
+        if self._email.enabled:
+            self._email.send(body, subject="TrendsCollector Error")
+        elif self._http_email.enabled:
+            self._http_email.send(body, "TrendsCollector Error")
 
     def _format_summary(self, stats: dict, top_items: list) -> str:
         from datetime import datetime

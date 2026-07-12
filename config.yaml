@@ -103,6 +103,18 @@ notifications:
     to_addrs:
       - "123456789@qq.com"
 
+  # HTTP Email API (for NAT VPS where SMTP ports 465/587 are blocked)
+  # Uses SendGrid (free: 100 emails/day via HTTPS API).
+  # Sign up: https://sendgrid.com → API Keys → Create API Key
+  # Then verify sender email in SendGrid → Settings → Sender Authentication
+  # API key also accepts env SENDGRID_API_KEY.
+  http_email:
+    enabled: false
+    api_key: ""             # SendGrid API key
+    from_addr: ""           # verified sender email in SendGrid
+    to_addrs:               # who receives the emails
+      - ""
+
 # --- Relay (China-side relay receiver) ---
 relay:
   push_key: ""
