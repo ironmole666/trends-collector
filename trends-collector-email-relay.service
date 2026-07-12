@@ -1,0 +1,21 @@
+[Unit]
+Description=TrendsCollector Email Relay - forwards reports from VPS B to SMTP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/trends-collector/venv/bin/python -m trends_collector.email_relay --port 8766 --config /opt/trends-collector/config.yaml
+WorkingDirectory=/opt/trends-collector
+Environment=PYTHONUNBUFFERED=1
+User=trends-collector
+Group=trends-collector
+# Shared key between VPS A and VPS B:
+# Environment=RELAY_PUSH_KEY=your_shared_secret
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/trends-collector/logs/email_relay.log
+StandardError=append:/opt/trends-collector/logs/email_relay.log
+
+[Install]
+WantedBy=multi-user.target

@@ -84,6 +84,33 @@ class _EmailChannel:
             logger.error(f"Email send failed: {e}")
 
 
+class _HttpRelayChannel:
+    """Sends report to a remote HTTP relay server (e.g. VPS A that has SMTP).
+    Used when the local VPS (VPS B) cannot reach SMTP ports directly."""
+
+    def __init__(self, config: dict):
+        relay_cfg = config.get("relay", {})
+        self.push_url = relay_cfg.get("push_url", "").strip()
+        self.push_key = relay_cfg.get("push_key", "")
+        self.enabled = bool(self.push_url)
+
+    def send(self, text: str, subject: str = "TrendsCollector Report"):
+        if not self.enabled:
+            return
+        try:
+            import requests
+            payload = {"text": text, "subject": subject}
+            if self.push_key:
+                payload["key"] = self.push_key
+            resp = requests.post(self.push_url, json=payload, timeout=15)
+            if resp.status_code != 200:
+                logger.error(f"Relay push failed: HTTP {resp.status_code} {resp.text[:100]}")
+            else:
+                logger.info(f"Report pushed to relay {self.push_url}")
+        except Exception as e:
+            logger.error(f"Relay push connection failed: {e}")
+
+
 class Notifier:
     """Dispatches notifications to all configured channels."""
 
@@ -91,6 +118,7 @@ class Notifier:
         notif_cfg = config.get("notifications", {})
         self._telegram = _TelegramChannel(notif_cfg)
         self._email = _EmailChannel(notif_cfg)
+        self._relay = _HttpRelayChannel(config)
         self._storage = None
 
     def set_storage(self, storage):
@@ -99,15 +127,21 @@ class Notifier:
     def send_summary(self, stats: dict, top_items: list, full_report: str = None):
         """Send collection summary.
         Telegram gets short summary (4096 char limit).
-        Email gets the full daily report (per-source TOP 10) if available.
+        Email gets the full daily report if available.
+        HTTP relay gets the full report (for VPS A to forward via SMTP).
         """
         short_text = self._format_summary(stats, top_items)
         self._telegram.send(short_text)
 
         if full_report:
             self._email.send(full_report, subject="TrendsCollector Report")
+            # If local email is disabled, push full report via HTTP relay
+            if not self._email.enabled:
+                self._relay.send(full_report, "TrendsCollector Report")
         else:
             self._email.send(short_text, subject="TrendsCollector Summary")
+            if not self._email.enabled:
+                self._relay.send(short_text, "TrendsCollector Summary")
 
     def send_error(self, message: str):
         body = f"\u26a0\ufe0f TrendsCollector Error\n{message}"

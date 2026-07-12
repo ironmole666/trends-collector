@@ -68,6 +68,10 @@ def load_config(config_path=None):
                 "to_addrs": [],
             },
         },
+        "relay": {
+            "push_url": "",
+            "push_key": "",
+        },
     }
 
     cfg = defaults.copy()
