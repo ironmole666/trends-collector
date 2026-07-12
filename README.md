@@ -193,9 +193,10 @@ Telegram 由于字符限制，发送的是短摘要。
 # 创建目录
 sudo mkdir -p /etc/systemd/system/trends-collector.timer.d
 
-# 写入新的时间规则
+# 写入新的时间规则（用一个空 OnCalendar= 先清掉默认的 30 分钟）
 echo '[Timer]
-OnCalendar=*:0/60              # 每 60 分钟一次
+OnCalendar=
+OnCalendar=0/2:00:00
 Persistent=true
 RandomizedDelaySec=120' | sudo tee /etc/systemd/system/trends-collector.timer.d/override.conf
 
