@@ -96,12 +96,12 @@ notifications:
     enabled: false
     smtp_host: "smtp.qq.com"
     smtp_port: 465
-    smtp_user: "123456789@qq.com"
+    smtp_user: "your@email.com"
     smtp_password: ""
     smtp_use_tls: false
-    from_addr: "123456789@qq.com"
+    from_addr: "your@email.com"
     to_addrs:
-      - "123456789@qq.com"
+      - "your@email.com"
 
   # HTTP Email API (for NAT VPS where SMTP ports 465/587 are blocked)
   # Uses SendGrid (free: 100 emails/day via HTTPS API).

@@ -38,7 +38,7 @@
 
 ```bash
 ssh 你的用户名@你的VPS_IP
-git clone http://8.148.193.129:3000/gitea/trends-collector.git
+git clone http://your-gitea-server/gitea/trends-collector.git
 cd trends-collector
 ```
 
@@ -507,7 +507,7 @@ cp /opt/trends-collector/data/trends.db ~/trends.db.backup
 ssh 新VPS的IP
 
 # 拉取代码
-git clone http://8.148.193.129:3000/gitea/trends-collector.git
+git clone http://your-gitea-server/gitea/trends-collector.git
 cd trends-collector
 
 # 一键部署

@@ -20,7 +20,7 @@ class WikipediaCollector(BaseCollector):
         self.session = requests.Session()
         # Wikimedia REQUIRES a contact-identifiable User-Agent
         self.session.headers.update({
-            "User-Agent": "TrendsCollector/1.0 (github.com/gitea/trends-collector; trends@collector.local)",
+            "User-Agent": "TrendsCollector/1.0 (github.com/user/trends-collector; trends@collector.local)",
             "Accept": "application/json",
         })
 
