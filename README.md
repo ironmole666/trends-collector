@@ -79,7 +79,7 @@ bash deploy.sh
 ### 3.1 Google Trends 关注哪些国家
 
 ```bash
-sudo nano /opt/trends-collector/config.yaml
+sudo vim /opt/trends-collector/config.yaml
 ```
 
 找到 `google_trends.regions`，增删国家代码：
@@ -483,3 +483,108 @@ trends-collector/
         ├── wikipedia.py               # Wikipedia 每日最佳文章
         └── youtube.py                 # YouTube 热门视频（可选）
 ```
+
+---
+
+## 十五、迁移到新 VPS
+
+将采集服务从一台 VPS 迁移到另一台的标准流程。
+
+### 第 1 步：停掉旧 VPS
+
+```bash
+ssh 旧VPS的IP
+
+# 停用定时器
+sudo systemctl stop trends-collector.timer
+sudo systemctl disable trends-collector.timer
+
+# 可选：备份数据库（如果要保留历史数据）
+cp /opt/trends-collector/data/trends.db ~/trends.db.backup
+```
+
+### 第 2 步：在新 VPS 上部署
+
+```bash
+ssh 新VPS的IP
+
+# 拉取代码
+git clone http://8.148.193.129:3000/gitea/trends-collector.git
+cd trends-collector
+
+# 一键部署
+bash deploy.sh
+```
+
+### 第 3 步：配置密钥（邮箱授权码等）
+
+```bash
+# 创建 override 目录（如果不存在）
+sudo mkdir -p /etc/systemd/system/trends-collector.service.d
+
+# 写入邮箱授权码
+echo '[Service]
+Environment=EMAIL_SMTP_PASSWORD=你的QQ邮箱授权码' | sudo tee /etc/systemd/system/trends-collector.service.d/override.conf
+
+# 如果有 Telegram 或 YouTube，加在同一行：
+echo '[Service]
+Environment=EMAIL_SMTP_PASSWORD=你的授权码
+Environment=TELEGRAM_BOT_TOKEN=你的token
+Environment=TELEGRAM_CHAT_ID=你的chat_id' | sudo tee /etc/systemd/system/trends-collector.service.d/override.conf
+
+sudo systemctl daemon-reload
+```
+
+### 第 4 步：配置关注的地区（如需）
+
+```bash
+sudo nano /opt/trends-collector/config.yaml
+```
+
+参照第三章修改 `google_trends.regions` 和 `wikipedia.languages`。
+
+### 第 5 步：测试运行
+
+```bash
+sudo systemctl start trends-collector.service
+sleep 4
+sudo tail -10 /opt/trends-collector/logs/collector.log
+```
+
+确认输出包含 `Email sent to`（邮件推送成功）并且有多个来源采集到数据。
+
+### 第 6 步：检查定时器
+
+```bash
+systemctl status trends-collector.timer
+systemctl list-timers trends-collector.timer
+```
+
+确认 `Active: active (waiting)`，下一轮执行时间正确。
+
+### 第 7 步（可选）：迁移历史数据
+
+如果旧 VPS 上积累的数据想要保留：
+
+```bash
+# 在旧 VPS 上，把备份传过来
+scp ~/trends.db.backup 新VPS的IP:/tmp/
+
+# 在新 VPS 上，替换数据库
+sudo systemctl stop trends-collector.service
+sudo cp /tmp/trends.db.backup /opt/trends-collector/data/trends.db
+sudo chown trends-collector:trends-collector /opt/trends-collector/data/trends.db
+sudo systemctl start trends-collector.service
+```
+
+### 验证迁移完成
+
+```bash
+# 查看日报，确认数据正常
+sudo /opt/trends-collector/venv/bin/python -m trends_collector --report
+
+# 查看最新日报文件
+sudo cat /opt/trends-collector/logs/report_$(ls -t /opt/trends-collector/logs/report_*.txt | head -1 | xargs basename)
+```
+
+> 以后所有 `git pull` 和代码更新都在新 VPS 上操作。旧 VPS 上的定时器已停，不会再发邮件。
