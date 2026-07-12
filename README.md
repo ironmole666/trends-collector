@@ -8,10 +8,10 @@
 
 | 来源 | 数据内容 | 说明 |
 |---|---|---|
-| **Google Trends** | 10 个地区每日热搜（US/JP/KR/GB 等），含搜索量估计 | RSS + Daily JSON API 双重降级，数据中心 IP 可用 |
+| **Google Trends** | 多国每日热搜（按国家分组展示，可自由增删） | RSS + Daily JSON API，config.yaml 中配置 regions |
 | **Hacker News** | 首页 30 条最热帖子（标题 + 分数 + 评论数） | Algolia API，**始终稳定** |
 | **GitHub** | 5 种语言趋势仓库（按 Star 数排序） | 爬 GitHub Trending 页面，**无需 API Key，无速率限制** |
-| **Wikipedia** | 7 种语言每日最佳文章（按浏览量排序） | Wikimedia REST API，**免费，无需注册** |
+| **Wikipedia** | 多语言每日最佳文章（按语言分组展示，可自由增删） | Wikimedia REST API，**免费，无需注册**，config.yaml 中配置 languages |
 | Reddit | 6 个子版块热门帖子 | 数据中心 IP 常被 403 封禁，视 VPS 网络而定 |
 | YouTube | 各地区热门视频 | 可选，需 Google Cloud API Key |
 
@@ -74,7 +74,70 @@ bash deploy.sh
 
 ---
 
-## 三、配置邮件推送（以 QQ 邮箱为例）
+## 三、配置要关注的地区与语言
+
+### 3.1 Google Trends 关注哪些国家
+
+```bash
+sudo nano /opt/trends-collector/config.yaml
+```
+
+找到 `google_trends.regions`，增删国家代码：
+
+```yaml
+collectors:
+  google_trends:
+    enabled: true
+    regions:
+      - US      # 🇺🇸 美国
+      - JP      # 🇯🇵 日本
+      - CN      # 🇨🇳 中国（海外 IP 返回空数据）
+      - TW      # 🇹🇼 台湾
+      - VN      # 🇻🇳 越南
+      - SG      # 🇸🇬 新加坡
+      - GB      # 🇬🇧 英国
+      - DE      # 🇩🇪 德国
+      - TH      # 🇹🇭 泰国
+      - AU      # 🇦🇺 澳大利亚
+      - IN      # 🇮🇳 印度
+      - IT      # 🇮🇹 意大利
+      - KR      # 🇰🇷 韩国
+```
+
+> 完整列表参考 [ISO 3166-1 国家代码](https://en.wikipedia.org/wiki/ISO_3166-1)。
+> 俄语 PT 等欢迎加 if 大家都不懂。改完保存，`sudo systemctl start trends-collector.service` 即可生效，无需重跑 deploy。
+
+### 3.2 Wikipedia 关注哪些语言
+
+```yaml
+collectors:
+  wikipedia:
+    enabled: true
+    languages:
+      - en      # 英文
+      - ja      # 日文
+      - zh      # 中文（海外 IP 可能被限）
+      - vi      # 越南文
+      - de      # 德文
+      - th      # 泰文
+      - it      # 意大利文
+```
+
+> 完整语言列表参考 [Wikimedia 项目列表](https://meta.wikimedia.org/wiki/List_of_Wikipedias)。
+
+### 3.3 修改后生效
+
+```bash
+sudo systemctl start trends-collector.service
+sleep 3
+sudo tail -5 /opt/trends-collector/logs/collector.log
+```
+
+看看对应地区采集到了几条数据。新增的国家/地区会自动出现在日报中，无需其他配置。
+
+---
+
+## 四、配置邮件推送（以 QQ 邮箱为例）
 
 ### 3.1 编辑配置文件
 
@@ -142,7 +205,7 @@ sudo systemctl daemon-reload
 
 ---
 
-## 四、邮件收到的是什么内容
+## 五、邮件收到的是什么内容
 
 邮件里是**完整的日报文本**，例如：
 
@@ -152,26 +215,31 @@ sudo systemctl daemon-reload
 ============================================================
 
 📈 各源统计（24h）:
-  google_trends    :  100
-  wikipedia        :  119
-  github           :  102
-  hackernews       :   31
+  Google Trends     :  100
+  Wikipedia         :  119
+  GitHub            :  102
+  Hacker News       :   31
 
-🔥 [Google Trends 热搜] TOP 10:
-   1. [ 1M+ ] some trending keyword
-   2. [ 500K+ ] another trending keyword
+🔥 [Google Trends - 🇺🇸 美国] TOP 10:
+   1. 某热搜词
        https://trends.google.com/...
 
-🔥 [Wikipedia 最佳文章] TOP 10:
-   1. (score: 523,412) Article title
+🔥 [Google Trends - 🇯🇵 日本] TOP 10:
+   1. 日本热搜词
+
+🔥 [Wikipedia - 🇬🇧 英文] TOP 10:
+   1. Article title
        https://en.wikipedia.org/wiki/...
 
+🔥 [Wikipedia - 🇯🇵 日文] TOP 10:
+   1. 記事タイトル
+
 🔥 [GitHub 趋势仓库] TOP 10:
-   1. (score: 1,234) [user/repo] repo description
+   1. [user/repo] repo description
        https://github.com/user/repo
 
 🔥 [Hacker News 前页] TOP 10:
-   1. (score: 1,343) Story title
+   1. Story title
        https://news.ycombinator.com/item?id=...
 ```
 
@@ -179,7 +247,7 @@ Telegram 由于字符限制，发送的是短摘要。
 
 ---
 
-## 五、采集频率
+## 六、采集频率
 
 ### 默认
 
@@ -234,7 +302,7 @@ systemctl list-timers trends-collector.timer
 
 ---
 
-## 六、查看数据
+## 七、查看数据
 
 ```bash
 # 各来源总量
@@ -254,7 +322,7 @@ sudo cat /opt/trends-collector/logs/$(ls -t /opt/trends-collector/logs/report_*.
 
 ---
 
-## 七、日常运维命令
+## 八、日常运维命令
 
 | 操作 | 命令 |
 |---|---|
@@ -269,7 +337,7 @@ sudo cat /opt/trends-collector/logs/$(ls -t /opt/trends-collector/logs/report_*.
 
 ---
 
-## 八、配置 Telegram 推送
+## 九、配置 Telegram 推送
 
 ```bash
 # 1. Telegram 中 @BotFather 创建 bot，获取 token
@@ -312,7 +380,7 @@ sudo systemctl start trends-collector.service
 
 ---
 
-## 九、配置 YouTube 采集（可选）
+## 十、配置 YouTube 采集（可选）
 
 需要 Google Cloud API Key：[启用 YouTube Data API v3](https://console.cloud.google.com/) 并创建密钥。
 
@@ -340,7 +408,7 @@ collectors:
 
 ---
 
-## 十、数据源说明
+## 十一、数据源说明
 
 | 源 | 可用性 | 原理 |
 |---|---|---|
@@ -355,7 +423,7 @@ collectors:
 
 ---
 
-## 十一、进阶：采集中国大陆热点（微博/百度/知乎）
+## 十二、进阶：采集中国大陆热点（微博/百度/知乎）
 
 需要一台能访问国内网络的机器作为中继。
 
@@ -373,7 +441,7 @@ collectors:
 
 ---
 
-## 十二、配置文件路径速查
+## 十三、配置文件路径速查
 
 | 用途 | 文件路径 | 编辑方式 |
 |---|---|---|
@@ -386,7 +454,7 @@ collectors:
 
 ---
 
-## 十三、项目结构
+## 十四、项目结构
 
 ```
 trends-collector/
