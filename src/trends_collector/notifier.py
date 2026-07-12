@@ -85,14 +85,47 @@ class _EmailChannel:
 
 
 class _HttpEmailChannel:
-    """Sends email via HTTPS API (SendGrid, Resend, etc.).
+    """Sends email via HTTPS API (SendGrid, Resend, Mailjet, etc.).
     Works when SMTP ports are blocked (NAT VPS).
     Goes through port 443 so it works on any VPS."""
+
+    # Provider templates: url, payload builder, response check
+    _PROVIDERS = {
+        "sendgrid": {
+            "url": "https://api.sendgrid.com/v3/mail/send",
+            "build": lambda subj, text, sender, to: {
+                "personalizations": [{"to": [{"email": a} for a in to]}],
+                "from": {"email": sender},
+                "subject": subj,
+                "content": [{"type": "text/plain", "value": text}],
+            },
+            "headers": lambda key: {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            "auth_err": lambda c: "SendGrid auth failed" if c == 401 else None,
+        },
+        "resend": {
+            "url": "https://api.resend.com/emails",
+            "build": lambda subj, text, sender, to: {
+                "from": sender,
+                "to": to if len(to) > 1 else to[0],
+                "subject": subj,
+                "text": text,
+            },
+            "headers": lambda key: {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            "auth_err": lambda c: "Resend auth failed" if c == 401 else None,
+        },
+    }
 
     def __init__(self, config: dict):
         cfg = config.get("http_email", {})
         self.enabled = cfg.get("enabled", False)
         self.api_key = cfg.get("api_key", "")
+        self.provider = cfg.get("provider", "sendgrid")
         self.from_addr = cfg.get("from_addr", "")
         self.to_addrs = cfg.get("to_addrs", [])
 
@@ -100,30 +133,29 @@ class _HttpEmailChannel:
         if not (self.enabled and self.api_key and self.from_addr and self.to_addrs):
             return
 
-        url = "https://api.sendgrid.com/v3/mail/send"
-        payload = {
-            "personalizations": [{"to": [{"email": a} for a in self.to_addrs]}],
-            "from": {"email": self.from_addr},
-            "subject": subject,
-            "content": [{"type": "text/plain", "value": text}],
-        }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        tmpl = self._PROVIDERS.get(self.provider)
+        if not tmpl:
+            logger.error(f"Unknown HTTP email provider: {self.provider}")
+            return
+
+        url = tmpl["url"]
+        payload = tmpl["build"](subject, text, self.from_addr, self.to_addrs)
+        headers = tmpl["headers"](self.api_key)
 
         try:
             resp = requests.post(url, json=payload, headers=headers, timeout=15)
-            if resp.status_code == 401:
-                logger.error("SendGrid auth failed -- check api_key")
-            elif resp.status_code == 403:
-                logger.error(f"SendGrid forbidden -- sender {self.from_addr} not verified")
-            elif resp.status_code not in (200, 201, 202):
-                logger.error(f"SendGrid API error: HTTP {resp.status_code} {resp.text[:200]}")
+            code = resp.status_code
+            auth_msg = tmpl["auth_err"](code)
+            if auth_msg:
+                logger.error(f"{auth_msg} -- check api_key")
+            elif code == 403:
+                logger.error(f"HTTP email 403 -- sender {self.from_addr} not verified")
+            elif code not in (200, 201, 202):
+                logger.error(f"HTTP email API error: HTTP {code} {resp.text[:200]}")
             else:
-                logger.info(f"Email sent via SendGrid API to {self.to_addrs}")
+                logger.info(f"Email sent via {self.provider} API to {self.to_addrs}")
         except Exception as e:
-            logger.error(f"SendGrid API request failed: {e}")
+            logger.error(f"HTTP email API request failed: {e}")
 
 
 class Notifier:
