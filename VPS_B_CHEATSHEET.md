@@ -80,10 +80,10 @@ sudo systemctl start trends-collector.timer     # 恢复
 ## 更新代码
 
 ```bash
-cd ~/test/trends-collector
+cd /home/scripts/trends-collector
 git pull
 sudo rm -rf /opt/trends-collector/src
-sudo cp -r ~/test/trends-collector/src /opt/trends-collector/src
+sudo cp -r /home/scripts/trends-collector/src /opt/trends-collector/src
 sudo /opt/trends-collector/venv/bin/pip install --quiet --force-reinstall -e /opt/trends-collector
 sudo systemctl start trends-collector.service
 sleep 4
@@ -98,7 +98,7 @@ sudo tail -5 /opt/trends-collector/logs/collector.log
 
 ```bash
 echo '[Service]
-Environment=SENDGRID_API_KEY=re_你的APIKey' | sudo tee /etc/systemd/system/trends-collector.service.d/override.conf
+Environment=SENDGRID_API_KEY=your-resend-api-key' | sudo tee /etc/systemd/system/trends-collector.service.d/override.conf
 sudo systemctl daemon-reload
 ```
 
@@ -111,9 +111,9 @@ http_email:
     enabled: true
     provider: "resend"       # sendgrid / resend / mailjet
     api_key: ""
-    from_addr: "trends@你的域名"
+    from_addr: "sender@your-domain.com"
     to_addrs:
-      - "youknowwho_1024@qq.com"
+      - "your@email.com"
 ```
 
 ### 测试邮件
@@ -218,7 +218,7 @@ sudo cp /opt/trends-collector/data/trends.db ~/trends.db.backup.$(date +%Y%m%d)
 
 | 用途 | 路径 |
 |---|---|
-| 项目代码 | `~/test/trends-collector/` |
+| 项目代码 | `/home/scripts/trends-collector/` |
 | 安装目录 | `/opt/trends-collector/` |
 | Python 虚拟环境 | `/opt/trends-collector/venv/` |
 | 配置文件 | `/opt/trends-collector/config.yaml` |
