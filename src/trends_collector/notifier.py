@@ -165,7 +165,7 @@ class Notifier:
         notif_cfg = config.get("notifications", {})
         self._telegram = _TelegramChannel(notif_cfg)
         self._email = _EmailChannel(notif_cfg)
-        self._http_email = _HttpEmailChannel(config)
+        self._http_email = _HttpEmailChannel(notif_cfg)
         self._storage = None
 
     def set_storage(self, storage):
