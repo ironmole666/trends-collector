@@ -142,9 +142,5 @@ class Notifier:
                     }.get(src, src)
                     for item in items:
                         title = item.get("title", "")[:60]
-                        score = item.get("score", 0)
-                        lines.append(f"  [{source_label}] {title}")
-                        if score > 0:
-                            lines[-1] += f" ({score:,})"
 
         return "\n".join(lines)

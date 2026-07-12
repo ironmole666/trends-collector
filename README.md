@@ -79,7 +79,7 @@ bash deploy.sh
 ### 3.1 编辑配置文件
 
 ```bash
-sudo nano /opt/trends-collector/config.yaml
+sudo vim /opt/trends-collector/config.yaml
 ```
 
 ```yaml
