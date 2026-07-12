@@ -78,14 +78,6 @@ collectors:
       - JP
       - GB
 
-# --- Translation (optional, translates report titles to Chinese) ---
-# Uses DeepL API (free: 500K chars/month). Get API key at:
-# https://www.deepl.com/pro#developer  →  Free API account
-translator:
-  enabled: false
-  api_key: ""              # DeepL API key, or env DEEPL_API_KEY
-  target_lang: "ZH"        # target language code (ZH, JA, EN, etc.)
-
 # --- Storage ---
 storage:
   db_path: null     # null = <data_dir>/trends.db

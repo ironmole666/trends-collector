@@ -45,7 +45,7 @@ _WP_LANG_NAMES = {
 }
 
 
-def generate_daily_report(storage, translator=None) -> str:
+def generate_daily_report(storage) -> str:
     """Generate the full daily report text."""
     stats = storage.get_stats(hours=24)
     by_source = stats.get("by_source", {})
@@ -78,11 +78,11 @@ def generate_daily_report(storage, translator=None) -> str:
     has_any = False
     for src in sorted(by_source.keys()):
         if src == "google_trends":
-            has_any |= _render_gt(storage, lines, translator)
+            has_any |= _render_gt(storage, lines)
         elif src == "wikipedia":
-            has_any |= _render_wp(storage, lines, translator)
+            has_any |= _render_wp(storage, lines)
         else:
-            has_any |= _render_other(src, storage, lines, translator)
+            has_any |= _render_other(src, storage, lines)
 
     if not has_any:
         lines.append("  (no trending data in past 24 hours)")
@@ -92,7 +92,7 @@ def generate_daily_report(storage, translator=None) -> str:
     return "\n".join(lines)
 
 
-def _render_gt(storage, lines, translator=None) -> bool:
+def _render_gt(storage, lines) -> bool:
     """Google Trends: 按国家分组，每个国家 TOP 10"""
     items = storage.get_recent(source="google_trends", limit=300, hours=24)
     if not items:
@@ -112,10 +112,7 @@ def _render_gt(storage, lines, translator=None) -> bool:
         has = True
         lines.append(f"\U0001f525 [Google Trends - {name}] TOP 10:")
         for i, item in enumerate(top, 1):
-            title = item.get("title", "")
-            if translator:
-                title = translator.translate(title)
-            title = title[:70]
+            title = item.get("title", "")[:70]
             url = item.get("url", "")
             lines.append(f"  {i:2d}. {title}")
             if url:
@@ -125,7 +122,7 @@ def _render_gt(storage, lines, translator=None) -> bool:
     return has
 
 
-def _render_wp(storage, lines, translator=None) -> bool:
+def _render_wp(storage, lines) -> bool:
     """Wikipedia: 按语言分组，每种语言 TOP 10"""
     items = storage.get_recent(source="wikipedia", limit=300, hours=24)
     if not items:
@@ -145,10 +142,7 @@ def _render_wp(storage, lines, translator=None) -> bool:
         has = True
         lines.append(f"\U0001f525 [Wikipedia - {name}] TOP 10:")
         for i, item in enumerate(top, 1):
-            title = item.get("title", "")
-            if translator:
-                title = translator.translate(title)
-            title = title[:70]
+            title = item.get("title", "")[:70]
             url = item.get("url", "")
             lines.append(f"  {i:2d}. {title}")
             if url:
@@ -158,7 +152,7 @@ def _render_wp(storage, lines, translator=None) -> bool:
     return has
 
 
-def _render_other(src: str, storage, lines, translator=None) -> bool:
+def _render_other(src: str, storage, lines) -> bool:
     """其他源：整体 TOP 10，不再显示评分"""
     top_items = storage.get_recent(source=src, limit=10, hours=24)
     if not top_items:
@@ -185,9 +179,9 @@ def _render_other(src: str, storage, lines, translator=None) -> bool:
 
 # -------- 外部接口 ----------
 
-def save_report(storage, log_dir: str, translator=None) -> Path:
+def save_report(storage, log_dir: str) -> Path:
     """Save the report to a timestamped file in log_dir. Returns the file path."""
-    report = generate_daily_report(storage, translator)
+    report = generate_daily_report(storage)
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
 
@@ -198,6 +192,6 @@ def save_report(storage, log_dir: str, translator=None) -> Path:
     return filepath
 
 
-def print_report(storage, translator=None):
+def print_report(storage):
     """Print the report to stdout."""
-    print(generate_daily_report(storage, translator))
+    print(generate_daily_report(storage))

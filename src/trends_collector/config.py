@@ -51,11 +51,6 @@ def load_config(config_path=None):
             "db_path": None,
             "retention_days": 30,
         },
-        "translator": {
-            "enabled": False,
-            "api_key": "",
-            "target_lang": "ZH",
-        },
         "notifications": {
             "telegram": {
                 "enabled": False,
@@ -112,7 +107,6 @@ def load_config(config_path=None):
         ("notifications", "telegram", "chat_id"): "TELEGRAM_CHAT_ID",
         ("notifications", "email", "smtp_password"): "EMAIL_SMTP_PASSWORD",
         ("notifications", "http_email", "api_key"): "SENDGRID_API_KEY",
-        ("translator", "api_key"): "DEEPL_API_KEY",
     }
 
     for keys, env_var in env_overrides.items():

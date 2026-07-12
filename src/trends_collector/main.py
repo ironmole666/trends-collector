@@ -20,7 +20,6 @@ from .config import load_config
 from .storage import Storage
 from .notifier import Notifier
 from .report import print_report, save_report
-from .translator import Translator
 from .collectors import (
     GoogleTrendsCollector,
     RedditCollector,
@@ -100,7 +99,7 @@ def build_collectors(config: dict):
     return collectors
 
 
-def run_collection(config: dict, storage: Storage, notifier: Notifier, log_dir: str, translator=None):
+def run_collection(config: dict, storage: Storage, notifier: Notifier, log_dir: str):
     ip = get_current_ip()
     logger.info(f"=== Collection started [IP: {ip}] ===")
 
@@ -126,7 +125,7 @@ def run_collection(config: dict, storage: Storage, notifier: Notifier, log_dir: 
     logger.info(f"=== Collection done: {total_items} items, {total_new} new ===")
 
     # Save report to file
-    report_path = save_report(storage, log_dir, translator)
+    report_path = save_report(storage, log_dir)
     logger.info(f"Report written to {report_path}")
 
     # Send summary notification
@@ -156,23 +155,22 @@ def main():
         config.get("log_level", "INFO"),
     )
     storage = Storage(config["storage"]["db_path"])
-    translator = Translator(config.get("translator", {}))
     notifier = Notifier(config)
     notifier.set_storage(storage)
     if args.report:
-        print_report(storage, translator)
-        save_report(storage, log_dir, translator)
+        print_report(storage)
+        save_report(storage, log_dir)
         return
 
     if args.once:
-        run_collection(config, storage, notifier, log_dir, translator)
+        run_collection(config, storage, notifier, log_dir)
         return
 
     # Default: continuous mode with random delay between cycles
     delay_range = (25 * 60, 35 * 60)
     logger.info(f"Continuous mode: delay range {delay_range[0]//60}-{delay_range[1]//60} min")
     while True:
-        run_collection(config, storage, notifier, log_dir, translator)
+        run_collection(config, storage, notifier, log_dir)
         storage.enforce_retention(config.get("storage", {}).get("retention_days", 30))
         sleep_secs = random.randint(*delay_range)
         logger.info(f"Next collection in {sleep_secs // 60} minutes")
