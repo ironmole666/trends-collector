@@ -46,6 +46,8 @@ sudo tail -5 /opt/trends-collector/logs/collector.log
 ### 修改采集间隔
 
 ```bash
+# 目录建过一次就不用再建了，但每次都带上 mkdir -p 也没问题
+sudo mkdir -p /etc/systemd/system/trends-collector.timer.d
 echo '[Timer]
 OnCalendar=
 OnCalendar=X:00:00' | sudo tee /etc/systemd/system/trends-collector.timer.d/override.conf

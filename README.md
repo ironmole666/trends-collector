@@ -258,13 +258,11 @@ Telegram 由于字符限制，发送的是短摘要。
 ### 修改频率（无编辑器方案）
 
 ```bash
-# 创建目录
+# 写入新的时间规则（目录只用建一次，但 mkdir -p 不会重复报错）
 sudo mkdir -p /etc/systemd/system/trends-collector.timer.d
-
-# 写入新的时间规则（用一个空 OnCalendar= 先清掉默认的 30 分钟）
 echo '[Timer]
 OnCalendar=
-OnCalendar=0/2:00:00
+OnCalendar=0/2:00:00                # 改成你要的间隔
 Persistent=true
 RandomizedDelaySec=120' | sudo tee /etc/systemd/system/trends-collector.timer.d/override.conf
 
