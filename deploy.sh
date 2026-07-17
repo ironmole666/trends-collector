@@ -38,7 +38,17 @@ rm -rf "${INSTALL_DIR}/src"
 cp -r "${SCRIPT_DIR}/src" "${INSTALL_DIR}/src"
 cp "${SCRIPT_DIR}/pyproject.toml" "${INSTALL_DIR}/"
 cp "${SCRIPT_DIR}/requirements.txt" "${INSTALL_DIR}/"
-cp "${SCRIPT_DIR}/config.yaml" "${INSTALL_DIR}/"
+
+# Keep the production configuration across upgrades.  The repository copy is
+# refreshed as an example so newly added options remain discoverable without
+# replacing VPS-specific regions, recipients, providers, or other settings.
+cp "${SCRIPT_DIR}/config.yaml" "${INSTALL_DIR}/config.yaml.example"
+if [[ ! -f "${INSTALL_DIR}/config.yaml" ]]; then
+    cp "${INSTALL_DIR}/config.yaml.example" "${INSTALL_DIR}/config.yaml"
+    echo "  Installed initial config.yaml"
+else
+    echo "  Preserved existing config.yaml"
+fi
 
 mkdir -p "${INSTALL_DIR}/data" "${INSTALL_DIR}/logs"
 

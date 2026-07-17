@@ -1,16 +1,21 @@
-.PHONY: install run report clean
+.PHONY: install run report test clean
+
+PYTHON ?= python3
 
 install:
-	pip install -r requirements.txt
+	$(PYTHON) -m pip install -r requirements.txt
 
 run:
-	python -m trends_collector --once
+	$(PYTHON) -m trends_collector --once
 
 run-loop:
-	python -m trends_collector
+	$(PYTHON) -m trends_collector
 
 report:
-	python -m trends_collector --report
+	$(PYTHON) -m trends_collector --report
+
+test:
+	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests -v
 
 deploy:
 	bash deploy.sh

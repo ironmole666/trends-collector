@@ -70,7 +70,19 @@ git pull
 bash deploy.sh
 ```
 
+升级时，`deploy.sh` 会保留已有的 `/opt/trends-collector/config.yaml`，并把仓库中的
+最新默认配置写入 `/opt/trends-collector/config.yaml.example` 供对照。首次部署时才会
+根据示例创建生产配置。
+
 > 只改 `config.yaml` 的话无需重跑 `deploy.sh`，直接 `sudo systemctl start trends-collector.service` 即可。
+
+升级后建议手动触发一次并确认采集、报告和邮件全部成功：
+
+```bash
+sudo systemctl start trends-collector.service
+sudo grep -E "Collection done|Report written|Email sent|email failed|No usable email" \
+  /opt/trends-collector/logs/collector.log | tail -10
+```
 
 ---
 

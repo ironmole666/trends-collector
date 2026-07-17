@@ -49,10 +49,22 @@ class _EmailChannel:
         self.from_addr = cfg.get("from_addr", "")
         self.to_addrs = cfg.get("to_addrs", [])
 
+    def missing_config(self) -> list[str]:
+        required = {
+            "smtp_host": self.host,
+            "smtp_user": self.user,
+            "smtp_password": self.password,
+            "from_addr": self.from_addr,
+            "to_addrs": self.to_addrs,
+        }
+        return [name for name, value in required.items() if not value]
+
+    def is_ready(self) -> bool:
+        return self.enabled and not self.missing_config()
+
     def send(self, text: str, subject: str = "TrendsCollector Summary"):
-        if not (self.enabled and self.host and self.user and self.password
-                and self.from_addr and self.to_addrs):
-            return
+        if not self.is_ready():
+            return False
 
         msg = MIMEText(text, "plain", "utf-8")
         msg["Subject"] = Header(subject, "utf-8")
@@ -74,6 +86,7 @@ class _EmailChannel:
                     server.sendmail(self.from_addr, self.to_addrs, msg.as_string())
 
             logger.info(f"Email sent to {self.to_addrs} via {self.host}:{self.port}")
+            return True
         except smtplib.SMTPAuthenticationError:
             logger.error("Email auth failed -- check smtp_user / smtp_password")
         except smtplib.SMTPRecipientsRefused as e:
@@ -82,6 +95,7 @@ class _EmailChannel:
             logger.error("Email server disconnected -- check host/port/TLS settings")
         except Exception as e:
             logger.error(f"Email send failed: {e}")
+        return False
 
 
 class _HttpEmailChannel:
@@ -129,14 +143,28 @@ class _HttpEmailChannel:
         self.from_addr = cfg.get("from_addr", "")
         self.to_addrs = cfg.get("to_addrs", [])
 
+    def missing_config(self) -> list[str]:
+        required = {
+            "api_key": self.api_key,
+            "from_addr": self.from_addr,
+            "to_addrs": self.to_addrs,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if self.provider not in self._PROVIDERS:
+            missing.append(f"supported provider (got {self.provider!r})")
+        return missing
+
+    def is_ready(self) -> bool:
+        return self.enabled and not self.missing_config()
+
     def send(self, text: str, subject: str = "TrendsCollector Report"):
-        if not (self.enabled and self.api_key and self.from_addr and self.to_addrs):
-            return
+        if not self.is_ready():
+            return False
 
         tmpl = self._PROVIDERS.get(self.provider)
         if not tmpl:
             logger.error(f"Unknown HTTP email provider: {self.provider}")
-            return
+            return False
 
         url = tmpl["url"]
         payload = tmpl["build"](subject, text, self.from_addr, self.to_addrs)
@@ -154,8 +182,10 @@ class _HttpEmailChannel:
                 logger.error(f"HTTP email API error: HTTP {code} {resp.text[:200]}")
             else:
                 logger.info(f"Email sent via {self.provider} API to {self.to_addrs}")
+                return True
         except Exception as e:
             logger.error(f"HTTP email API request failed: {e}")
+        return False
 
 
 class Notifier:
@@ -167,6 +197,19 @@ class Notifier:
         self._email = _EmailChannel(notif_cfg)
         self._http_email = _HttpEmailChannel(notif_cfg)
         self._storage = None
+        self._log_email_config_warnings()
+
+    def _log_email_config_warnings(self):
+        channels = (
+            ("SMTP email", self._email),
+            ("HTTP email", self._http_email),
+        )
+        for label, channel in channels:
+            if channel.enabled and not channel.is_ready():
+                logger.warning(
+                    f"{label} enabled but incomplete; missing: "
+                    f"{', '.join(channel.missing_config())}"
+                )
 
     def set_storage(self, storage):
         self._storage = storage
@@ -180,27 +223,38 @@ class Notifier:
         short_text = self._format_summary(stats, top_items)
         self._telegram.send(short_text)
 
-        if full_report:
-            # Try SMTP first (VPS A), fall back to HTTP API (VPS B)
-            if self._email.enabled:
-                self._email.send(full_report, subject="TrendsCollector Report")
-            elif self._http_email.enabled:
-                self._http_email.send(full_report, "TrendsCollector Report")
-            else:
-                logger.warning("No email channel enabled (neither SMTP nor HTTP API)")
-        else:
-            if self._email.enabled:
-                self._email.send(short_text, subject="TrendsCollector Summary")
-            elif self._http_email.enabled:
-                self._http_email.send(short_text, "TrendsCollector Summary")
+        email_text = full_report or short_text
+        subject = "TrendsCollector Report" if full_report else "TrendsCollector Summary"
+        self._send_email_with_fallback(email_text, subject)
 
     def send_error(self, message: str):
         body = f"\u26a0\ufe0f TrendsCollector Error\n{message}"
         self._telegram.send(body)
-        if self._email.enabled:
-            self._email.send(body, subject="TrendsCollector Error")
-        elif self._http_email.enabled:
-            self._http_email.send(body, "TrendsCollector Error")
+        self._send_email_with_fallback(body, "TrendsCollector Error")
+
+    def _send_email_with_fallback(self, text: str, subject: str) -> bool:
+        """Try every ready email channel in priority order until one succeeds."""
+        ready_channels = []
+        if self._email.is_ready():
+            ready_channels.append(("SMTP", self._email))
+        if self._http_email.is_ready():
+            ready_channels.append(("HTTP", self._http_email))
+
+        if not ready_channels:
+            logger.warning(
+                "No usable email channel configured "
+                "(channels are disabled or missing required settings)"
+            )
+            return False
+
+        for index, (label, channel) in enumerate(ready_channels):
+            if channel.send(text, subject):
+                return True
+            if index < len(ready_channels) - 1:
+                logger.warning(f"{label} email failed; trying next configured channel")
+
+        logger.error("All configured email channels failed")
+        return False
 
     def _format_summary(self, stats: dict, top_items: list) -> str:
         from datetime import datetime
