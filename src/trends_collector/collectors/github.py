@@ -28,10 +28,15 @@ class GitHubCollector(BaseCollector):
 
     def collect(self) -> list:
         all_items = []
+        seen_urls = set()
         for lang in self.languages:
             try:
                 items = self._fetch_trending(lang)
-                all_items.extend(items)
+                for item in items:
+                    url = item.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        all_items.append(item)
             except Exception as e:
                 logger.error(f"[GitHub {lang}] Failed: {e}")
         return all_items
